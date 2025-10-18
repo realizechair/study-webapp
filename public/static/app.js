@@ -37,6 +37,10 @@ function loadView(view) {
             break;
         case 'study':
             app.innerHTML = renderStudyMenu();
+            loadCategories().then(() => {
+                populateQuizCategoryOptions();
+                populateReviewCategoryOptions();
+            });
             loadQuestionSets().then(() => {
                 populateQuizSetOptions();
             });
@@ -275,6 +279,13 @@ function renderStudyMenu() {
                             <p class="text-gray-600 mb-4">問題をランダムに出題します</p>
                             
                             <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">カテゴリー</label>
+                                <select id="quiz-category" onchange="updateQuizSetsByCategory()" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">すべてのカテゴリー</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">問題セット</label>
                                 <select id="quiz-set" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                                     <option value="">すべて</option>
@@ -306,6 +317,13 @@ function renderStudyMenu() {
                             <i class="fas fa-redo text-5xl text-orange-600 mb-4"></i>
                             <h3 class="text-2xl font-bold text-gray-800 mb-4">復習モード</h3>
                             <p class="text-gray-600 mb-4">間違えた問題を復習します</p>
+                            
+                            <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">カテゴリー</label>
+                                <select id="review-category" onchange="updateReviewSetsByCategory()" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">すべてのカテゴリー</option>
+                                </select>
+                            </div>
                             
                             <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">問題セット</label>
@@ -1137,6 +1155,50 @@ function populateQuizSetOptions() {
     
     if (quizSetEl) quizSetEl.innerHTML = options;
     if (reviewSetEl) reviewSetEl.innerHTML = options;
+}
+
+function populateQuizCategoryOptions() {
+    const categoryEl = document.getElementById('quiz-category');
+    if (!categoryEl) return;
+    
+    categoryEl.innerHTML = '<option value="">すべてのカテゴリー</option>' +
+        categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('');
+}
+
+function populateReviewCategoryOptions() {
+    const categoryEl = document.getElementById('review-category');
+    if (!categoryEl) return;
+    
+    categoryEl.innerHTML = '<option value="">すべてのカテゴリー</option>' +
+        categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('');
+}
+
+function updateQuizSetsByCategory() {
+    const categoryId = document.getElementById('quiz-category')?.value;
+    const quizSetEl = document.getElementById('quiz-set');
+    if (!quizSetEl) return;
+    
+    let filteredSets = questionSets;
+    if (categoryId) {
+        filteredSets = questionSets.filter(set => set.category_id == categoryId);
+    }
+    
+    quizSetEl.innerHTML = '<option value="">すべて</option>' +
+        filteredSets.map(set => `<option value="${set.id}">${escapeHtml(set.name)}</option>`).join('');
+}
+
+function updateReviewSetsByCategory() {
+    const categoryId = document.getElementById('review-category')?.value;
+    const reviewSetEl = document.getElementById('review-set');
+    if (!reviewSetEl) return;
+    
+    let filteredSets = questionSets;
+    if (categoryId) {
+        filteredSets = questionSets.filter(set => set.category_id == categoryId);
+    }
+    
+    reviewSetEl.innerHTML = '<option value="">すべて</option>' +
+        filteredSets.map(set => `<option value="${set.id}">${escapeHtml(set.name)}</option>`).join('');
 }
 
 async function filterQuestionsBySet(setId) {
