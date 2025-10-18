@@ -626,6 +626,12 @@ function renderQuizQuestion() {
                         </div>
 
                         <!-- Action Buttons -->
+                        <div class="flex gap-3 mb-4">
+                            <button onclick="markForReview(${question.id})" class="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <i class="fas fa-bookmark"></i>
+                                <span>復習する</span>
+                            </button>
+                        </div>
                         <div class="flex gap-3">
                             <button onclick="loadView('home')" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition flex items-center justify-center gap-2">
                                 <i class="fas fa-home"></i>
@@ -1078,5 +1084,45 @@ async function filterQuestionsBySet(setId) {
         }
     } catch (error) {
         alert('問題の読み込みに失敗しました: ' + error.message);
+    }
+}
+
+// Review mark functions
+async function markForReview(questionId) {
+    try {
+        const response = await axios.post('/api/review-marks', {
+            question_id: questionId
+        });
+        
+        if (response.data.success) {
+            // Show success message with icon
+            const message = document.createElement('div');
+            message.className = 'fixed top-4 right-4 bg-yellow-500 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2 z-50';
+            message.innerHTML = '<i class="fas fa-bookmark"></i><span>復習リストに追加しました</span>';
+            document.body.appendChild(message);
+            
+            setTimeout(() => {
+                message.remove();
+            }, 2000);
+        } else {
+            alert('復習リストへの追加に失敗しました');
+        }
+    } catch (error) {
+        console.error('Failed to mark for review:', error);
+        alert('復習リストへの追加に失敗しました: ' + error.message);
+    }
+}
+
+async function unmarkForReview(questionId) {
+    try {
+        const response = await axios.delete(`/api/review-marks/${questionId}`);
+        
+        if (response.data.success) {
+            alert('復習リストから削除しました');
+        } else {
+            alert('削除に失敗しました');
+        }
+    } catch (error) {
+        alert('削除に失敗しました: ' + error.message);
     }
 }

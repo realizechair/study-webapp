@@ -191,39 +191,69 @@ app.get('/api/questions/random/:count', async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
-// Get questions for review (based on incorrect answers)
+// Get questions for review (based on incorrect answers + review marks)
 app.get('/api/questions/review', async (c) => {
   const { env } = c;
   const limit = c.req.query('limit') || '20';
   const setId = c.req.query('set_id');
   
-  let query = `
+  // Get questions with incorrect answers
+  let incorrectQuery = `
     SELECT DISTINCT q.*, 
            COUNT(lh.id) as attempt_count,
            SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
-           MAX(lh.attempted_at) as last_attempted
+           MAX(lh.attempted_at) as last_attempted,
+           0 as is_marked
     FROM questions q
     LEFT JOIN learning_history lh ON q.id = lh.question_id
     WHERE lh.id IS NOT NULL
   `;
   
-  const params: string[] = [];
+  const incorrectParams: string[] = [];
   
   if (setId) {
-    query += ' AND q.set_id = ?';
-    params.push(setId);
+    incorrectQuery += ' AND q.set_id = ?';
+    incorrectParams.push(setId);
   }
   
-  query += `
+  incorrectQuery += `
     GROUP BY q.id
     HAVING correct_count < attempt_count
-    ORDER BY last_attempted DESC, attempt_count DESC
+  `;
+  
+  // Get marked questions
+  let markedQuery = `
+    SELECT DISTINCT q.*,
+           0 as attempt_count,
+           0 as correct_count,
+           rm.marked_at as last_attempted,
+           1 as is_marked
+    FROM questions q
+    INNER JOIN review_marks rm ON q.id = rm.question_id
+  `;
+  
+  const markedParams: string[] = [];
+  
+  if (setId) {
+    markedQuery += ' WHERE q.set_id = ?';
+    markedParams.push(setId);
+  }
+  
+  // Combine both queries with UNION
+  const combinedQuery = `
+    WITH review_questions AS (
+      ${incorrectQuery}
+      UNION
+      ${markedQuery}
+    )
+    SELECT * FROM review_questions
+    ORDER BY is_marked DESC, last_attempted DESC, attempt_count DESC
     LIMIT ?
   `;
   
-  params.push(limit);
+  const allParams = [...incorrectParams, ...markedParams, limit];
   
-  const result = await env.DB.prepare(query).bind(...params).all();
+  const result = await env.DB.prepare(combinedQuery).bind(...allParams).all();
   return c.json({ success: true, data: result.results });
 });
 
@@ -363,6 +393,77 @@ app.get('/api/questions/export', async (c) => {
   
   return c.json({ success: true, data: result.results });
 });
+
+// ==================== Review Marks API ====================
+
+// Add review mark to a question
+app.post('/api/review-marks', async (c) => {
+  const { env } = c;
+  const body = await c.req.json();
+  const { question_id } = body;
+  
+  if (!question_id) {
+    return c.json({ success: false, error: 'Question ID is required' }, 400);
+  }
+  
+  try {
+    // Use INSERT OR IGNORE to avoid duplicate marks
+    await env.DB.prepare(
+      'INSERT OR IGNORE INTO review_marks (question_id) VALUES (?)'
+    ).bind(question_id).run();
+    
+    return c.json({ success: true });
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to add review mark: ' + String(error) }, 500);
+  }
+});
+
+// Remove review mark from a question
+app.delete('/api/review-marks/:question_id', async (c) => {
+  const { env } = c;
+  const questionId = c.req.param('question_id');
+  
+  const result = await env.DB.prepare('DELETE FROM review_marks WHERE question_id = ?').bind(questionId).run();
+  
+  return c.json({ success: true, deleted: result.meta.changes > 0 });
+});
+
+// Check if question is marked for review
+app.get('/api/review-marks/:question_id', async (c) => {
+  const { env } = c;
+  const questionId = c.req.param('question_id');
+  
+  const result = await env.DB.prepare('SELECT * FROM review_marks WHERE question_id = ?').bind(questionId).first();
+  
+  return c.json({ success: true, is_marked: !!result });
+});
+
+// Get all marked questions
+app.get('/api/review-marks', async (c) => {
+  const { env } = c;
+  const setId = c.req.query('set_id');
+  
+  let query = `
+    SELECT q.*, rm.marked_at
+    FROM questions q
+    INNER JOIN review_marks rm ON q.id = rm.question_id
+  `;
+  
+  const params: string[] = [];
+  
+  if (setId) {
+    query += ' WHERE q.set_id = ?';
+    params.push(setId);
+  }
+  
+  query += ' ORDER BY rm.marked_at DESC';
+  
+  const result = await env.DB.prepare(query).bind(...params).all();
+  
+  return c.json({ success: true, data: result.results });
+});
+
+// ==================== Learning History API ====================
 
 // Record learning attempt
 app.post('/api/learning/record', async (c) => {
