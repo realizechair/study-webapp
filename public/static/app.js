@@ -5,6 +5,7 @@ let questionSets = [];
 let categories = [];
 let selectedSetId = null;
 let selectedCategoryId = null;
+let selectedSetIds = []; // For bulk deletion
 let currentQuestionIndex = 0;
 let quizQuestions = [];
 let quizAnswers = [];
@@ -218,6 +219,14 @@ function renderManage() {
                                     問題セット一覧
                                 </h2>
                                 <div class="flex gap-2">
+                                    <button onclick="toggleAllSetSelection()" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg transition text-sm">
+                                        <i class="fas fa-check-square mr-1"></i>
+                                        <span id="toggle-select-text">すべて選択</span>
+                                    </button>
+                                    <button onclick="bulkDeleteSets()" id="bulk-delete-btn" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition text-sm" style="display: none;">
+                                        <i class="fas fa-trash-alt mr-1"></i>
+                                        <span id="bulk-delete-count">0</span>件削除
+                                    </button>
                                     <select id="category-filter" onchange="filterSetsByCategory(this.value)" class="px-4 py-2 border border-gray-300 rounded-lg">
                                         <option value="">すべてのカテゴリー</option>
                                     </select>
@@ -1120,33 +1129,46 @@ function renderQuestionSetsList() {
     }
     
     listEl.innerHTML = filteredSets.map(set => `
-        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
-            <div class="flex justify-between items-start mb-2">
+        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition ${selectedSetIds.includes(set.id) ? 'bg-blue-50 border-blue-300' : ''}">
+            <div class="flex items-start gap-3">
+                ${set.id !== 1 ? `
+                    <input type="checkbox" 
+                           id="set-checkbox-${set.id}" 
+                           onchange="toggleSetSelection(${set.id})" 
+                           ${selectedSetIds.includes(set.id) ? 'checked' : ''}
+                           class="mt-1 w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500">
+                ` : '<div class="w-5"></div>'}
                 <div class="flex-1">
-                    <div class="flex items-center gap-2 mb-1">
-                        ${set.category_color ? `<div class="w-3 h-3 rounded-full" style="background-color: ${set.category_color}"></div>` : ''}
-                        <span class="text-xs text-gray-500">${escapeHtml(set.category_name || '未分類')}</span>
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                ${set.category_color ? `<div class="w-3 h-3 rounded-full" style="background-color: ${set.category_color}"></div>` : ''}
+                                <span class="text-xs text-gray-500">${escapeHtml(set.category_name || '未分類')}</span>
+                            </div>
+                            <h4 class="font-semibold text-gray-800 text-lg">${escapeHtml(set.name)}</h4>
+                            ${set.description ? `<p class="text-sm text-gray-500 mt-1">${escapeHtml(set.description)}</p>` : ''}
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="editQuestionSet(${set.id})" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition text-sm">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ${set.id !== 1 ? `
+                                <button onclick="deleteQuestionSet(${set.id})" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg transition text-sm">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
-                    <h4 class="font-semibold text-gray-800 text-lg">${escapeHtml(set.name)}</h4>
-                    ${set.description ? `<p class="text-sm text-gray-500 mt-1">${escapeHtml(set.description)}</p>` : ''}
+                    <div class="flex items-center gap-4 text-sm text-gray-600">
+                        <span><i class="fas fa-question-circle mr-1"></i>${set.question_count || 0}問</span>
+                        <span><i class="fas fa-clock mr-1"></i>${new Date(set.created_at).toLocaleDateString('ja-JP')}</span>
+                    </div>
                 </div>
-                <div class="flex gap-2">
-                    <button onclick="editQuestionSet(${set.id})" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition text-sm">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    ${set.id !== 1 ? `
-                        <button onclick="deleteQuestionSet(${set.id})" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg transition text-sm">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    ` : ''}
-                </div>
-            </div>
-            <div class="flex items-center gap-4 text-sm text-gray-600">
-                <span><i class="fas fa-question-circle mr-1"></i>${set.question_count || 0}問</span>
-                <span><i class="fas fa-clock mr-1"></i>${new Date(set.created_at).toLocaleDateString('ja-JP')}</span>
             </div>
         </div>
     `).join('');
+    
+    updateBulkDeleteButton();
 }
 
 function populateSetFilter() {
@@ -1561,4 +1583,147 @@ async function resetQuestionStats(questionId) {
     } catch (error) {
         alert('リセットに失敗しました: ' + error.message);
     }
+}
+
+// ==================== Bulk Question Set Management ====================
+
+function toggleSetSelection(setId) {
+    const index = selectedSetIds.indexOf(setId);
+    if (index > -1) {
+        selectedSetIds.splice(index, 1);
+    } else {
+        selectedSetIds.push(setId);
+    }
+    updateBulkDeleteButton();
+    renderQuestionSetsList();
+}
+
+function toggleAllSetSelection() {
+    // Filter by category if selected
+    let filteredSets = questionSets;
+    if (selectedCategoryId) {
+        filteredSets = questionSets.filter(set => set.category_id == selectedCategoryId);
+    }
+    
+    // Get deletable sets (exclude default set with id=1)
+    const deletableSets = filteredSets.filter(set => set.id !== 1);
+    const deletableIds = deletableSets.map(set => set.id);
+    
+    // Check if all deletable sets are selected
+    const allSelected = deletableIds.every(id => selectedSetIds.includes(id));
+    
+    if (allSelected) {
+        // Deselect all
+        selectedSetIds = selectedSetIds.filter(id => !deletableIds.includes(id));
+    } else {
+        // Select all deletable sets
+        deletableIds.forEach(id => {
+            if (!selectedSetIds.includes(id)) {
+                selectedSetIds.push(id);
+            }
+        });
+    }
+    
+    updateBulkDeleteButton();
+    renderQuestionSetsList();
+}
+
+function updateBulkDeleteButton() {
+    const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+    const bulkDeleteCount = document.getElementById('bulk-delete-count');
+    const toggleSelectText = document.getElementById('toggle-select-text');
+    
+    if (!bulkDeleteBtn || !bulkDeleteCount) return;
+    
+    if (selectedSetIds.length > 0) {
+        bulkDeleteBtn.style.display = 'block';
+        bulkDeleteCount.textContent = selectedSetIds.length;
+    } else {
+        bulkDeleteBtn.style.display = 'none';
+    }
+    
+    // Update toggle button text
+    if (toggleSelectText) {
+        // Filter by category if selected
+        let filteredSets = questionSets;
+        if (selectedCategoryId) {
+            filteredSets = questionSets.filter(set => set.category_id == selectedCategoryId);
+        }
+        
+        const deletableSets = filteredSets.filter(set => set.id !== 1);
+        const deletableIds = deletableSets.map(set => set.id);
+        const allSelected = deletableIds.length > 0 && deletableIds.every(id => selectedSetIds.includes(id));
+        
+        toggleSelectText.textContent = allSelected ? 'すべて解除' : 'すべて選択';
+    }
+}
+
+async function bulkDeleteSets() {
+    if (selectedSetIds.length === 0) {
+        alert('削除する問題セットを選択してください');
+        return;
+    }
+    
+    const confirmText = `選択した${selectedSetIds.length}件の問題セットを削除しますか？\n\n含まれるすべての問題と学習履歴も削除されます。\nこの操作は取り消せません。`;
+    
+    if (!confirm(confirmText)) {
+        return;
+    }
+    
+    // 二重確認
+    const doubleConfirm = prompt(`${selectedSetIds.length}件の問題セットを削除するには「削除」と入力してください:`);
+    if (doubleConfirm !== '削除') {
+        alert('キャンセルしました');
+        return;
+    }
+    
+    // Show loading message
+    const originalBtn = document.getElementById('bulk-delete-btn');
+    if (originalBtn) {
+        originalBtn.disabled = true;
+        originalBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>削除中...';
+    }
+    
+    let successCount = 0;
+    let failCount = 0;
+    const errors = [];
+    
+    // Delete each selected set
+    for (const setId of selectedSetIds) {
+        try {
+            const response = await axios.delete(`/api/question-sets/${setId}`);
+            if (response.data.success) {
+                successCount++;
+            } else {
+                failCount++;
+                errors.push(`セットID ${setId}: ${response.data.error}`);
+            }
+        } catch (error) {
+            failCount++;
+            errors.push(`セットID ${setId}: ${error.message}`);
+        }
+    }
+    
+    // Clear selection
+    selectedSetIds = [];
+    
+    // Show result
+    let message = `削除が完了しました。\n成功: ${successCount}件`;
+    if (failCount > 0) {
+        message += `\n失敗: ${failCount}件\n\n${errors.join('\n')}`;
+    }
+    alert(message);
+    
+    // Reload data
+    await loadQuestionSets();
+    renderQuestionSetsList();
+    loadQuestions();
+    loadStats();
+    
+    // Reset button
+    if (originalBtn) {
+        originalBtn.disabled = false;
+        originalBtn.innerHTML = '<i class="fas fa-trash-alt mr-1"></i><span id="bulk-delete-count">0</span>件削除';
+    }
+    updateBulkDeleteButton();
 }
