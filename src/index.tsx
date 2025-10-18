@@ -634,6 +634,41 @@ app.get('/api/learning/difficulty-stats', async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
+// Reset all learning statistics
+app.delete('/api/learning/reset', async (c) => {
+  const { env } = c;
+  
+  try {
+    // Delete all learning history
+    await env.DB.prepare('DELETE FROM learning_history').run();
+    
+    // Delete all review marks
+    await env.DB.prepare('DELETE FROM review_marks').run();
+    
+    return c.json({ success: true, message: 'All learning statistics have been reset' });
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to reset statistics: ' + String(error) }, 500);
+  }
+});
+
+// Reset statistics for a specific question
+app.delete('/api/learning/reset/:question_id', async (c) => {
+  const { env } = c;
+  const questionId = c.req.param('question_id');
+  
+  try {
+    // Delete learning history for this question
+    await env.DB.prepare('DELETE FROM learning_history WHERE question_id = ?').bind(questionId).run();
+    
+    // Delete review mark for this question
+    await env.DB.prepare('DELETE FROM review_marks WHERE question_id = ?').bind(questionId).run();
+    
+    return c.json({ success: true, message: 'Statistics for question reset' });
+  } catch (error) {
+    return c.json({ success: false, error: 'Failed to reset question statistics: ' + String(error) }, 500);
+  }
+});
+
 // ==================== Frontend Route ====================
 
 app.get('/', (c) => {

@@ -363,14 +363,25 @@ function renderStats() {
                             <i class="fas fa-chart-bar text-purple-600 mr-2"></i>
                             統計情報
                         </h1>
-                        <button onclick="loadView('home')" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition">
-                            <i class="fas fa-home mr-2"></i>ホームに戻る
-                        </button>
+                        <div class="flex gap-3">
+                            <button onclick="resetAllStats()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg transition">
+                                <i class="fas fa-trash-alt mr-2"></i>統計をリセット
+                            </button>
+                            <button onclick="loadView('home')" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg transition">
+                                <i class="fas fa-home mr-2"></i>ホームに戻る
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Overall Stats -->
                     <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">全体の統計</h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">全体の統計</h2>
+                            <p class="text-sm text-gray-500">
+                                <i class="fas fa-info-circle mr-1"></i>
+                                学習履歴と復習マークがリセットされます
+                            </p>
+                        </div>
                         <div id="overall-stats" class="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div class="text-center">
                                 <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
@@ -1477,5 +1488,77 @@ function switchManageTab(tabName) {
         loadQuestionSets().then(() => {
             populateSetFilter();
         });
+    }
+}
+
+// ==================== Question Management ====================
+
+async function deleteQuestion(questionId) {
+    if (!confirm('この問題を削除しますか？\n関連する学習履歴も削除されます。')) {
+        return;
+    }
+    
+    try {
+        const response = await axios.delete(`/api/questions/${questionId}`);
+        
+        if (response.data.success) {
+            alert('問題を削除しました');
+            loadQuestions();
+            loadStats();
+        } else {
+            alert('削除に失敗しました: ' + response.data.error);
+        }
+    } catch (error) {
+        alert('削除に失敗しました: ' + error.message);
+    }
+}
+
+// ==================== Statistics Management ====================
+
+async function resetAllStats() {
+    const confirmText = '本当にすべての統計データをリセットしますか？\n\n以下のデータが削除されます：\n- すべての学習履歴\n- すべての復習マーク\n\nこの操作は取り消せません。';
+    
+    if (!confirm(confirmText)) {
+        return;
+    }
+    
+    // 二重確認
+    const doubleConfirm = prompt('統計をリセットするには「リセット」と入力してください:');
+    if (doubleConfirm !== 'リセット') {
+        alert('キャンセルしました');
+        return;
+    }
+    
+    try {
+        const response = await axios.delete('/api/learning/reset');
+        
+        if (response.data.success) {
+            alert('すべての統計データをリセットしました');
+            loadStats();
+            loadDetailedStats();
+        } else {
+            alert('リセットに失敗しました: ' + response.data.error);
+        }
+    } catch (error) {
+        alert('リセットに失敗しました: ' + error.message);
+    }
+}
+
+async function resetQuestionStats(questionId) {
+    if (!confirm('この問題の統計データをリセットしますか？')) {
+        return;
+    }
+    
+    try {
+        const response = await axios.delete(`/api/learning/reset/${questionId}`);
+        
+        if (response.data.success) {
+            alert('統計データをリセットしました');
+            loadStats();
+        } else {
+            alert('リセットに失敗しました: ' + response.data.error);
+        }
+    } catch (error) {
+        alert('リセットに失敗しました: ' + error.message);
     }
 }
