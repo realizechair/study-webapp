@@ -592,7 +592,16 @@ async function submitAnswer(userAnswer) {
         return;
     }
     
-    const isCorrect = userAnswer === question.answer;
+    // Normalize answer - handle both ○ (U+25CB) and 〇 (U+3007)
+    const normalizeAnswer = (ans) => {
+        if (!ans) return ans;
+        // Convert both circle types to standard ○
+        return ans.replace(/[○〇]/g, '○').replace(/[×]/g, '×');
+    };
+    
+    const normalizedUserAnswer = normalizeAnswer(userAnswer);
+    const normalizedCorrectAnswer = normalizeAnswer(question.answer);
+    const isCorrect = normalizedUserAnswer === normalizedCorrectAnswer;
     
     // Record answer
     quizAnswers.push({
