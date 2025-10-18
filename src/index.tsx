@@ -16,18 +16,126 @@ app.use('/static/*', serveStatic({ root: './public' }))
 
 // ==================== API Routes ====================
 
+// ==================== Question Sets API ====================
+
+// Get all question sets
+app.get('/api/question-sets', async (c) => {
+  const { env } = c;
+  
+  const result = await env.DB.prepare(`
+    SELECT qs.*, COUNT(q.id) as question_count
+    FROM question_sets qs
+    LEFT JOIN questions q ON qs.id = q.set_id
+    GROUP BY qs.id
+    ORDER BY qs.created_at DESC
+  `).all();
+  
+  return c.json({ success: true, data: result.results });
+});
+
+// Get single question set
+app.get('/api/question-sets/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  
+  const result = await env.DB.prepare(`
+    SELECT qs.*, COUNT(q.id) as question_count
+    FROM question_sets qs
+    LEFT JOIN questions q ON qs.id = q.set_id
+    WHERE qs.id = ?
+    GROUP BY qs.id
+  `).bind(id).first();
+  
+  if (!result) {
+    return c.json({ success: false, error: 'Question set not found' }, 404);
+  }
+  
+  return c.json({ success: true, data: result });
+});
+
+// Create question set
+app.post('/api/question-sets', async (c) => {
+  const { env } = c;
+  const body = await c.req.json();
+  const { name, description } = body;
+  
+  if (!name) {
+    return c.json({ success: false, error: 'Name is required' }, 400);
+  }
+  
+  const result = await env.DB.prepare(
+    'INSERT INTO question_sets (name, description) VALUES (?, ?)'
+  ).bind(name, description || '').run();
+  
+  return c.json({ success: true, data: { id: result.meta.last_row_id } });
+});
+
+// Update question set
+app.put('/api/question-sets/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { name, description } = body;
+  
+  if (!name) {
+    return c.json({ success: false, error: 'Name is required' }, 400);
+  }
+  
+  const result = await env.DB.prepare(
+    'UPDATE question_sets SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(name, description || '', id).run();
+  
+  if (result.meta.changes === 0) {
+    return c.json({ success: false, error: 'Question set not found' }, 404);
+  }
+  
+  return c.json({ success: true });
+});
+
+// Delete question set
+app.delete('/api/question-sets/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  
+  // Check if it's the default set
+  if (id === '1') {
+    return c.json({ success: false, error: 'Cannot delete default question set' }, 400);
+  }
+  
+  const result = await env.DB.prepare('DELETE FROM question_sets WHERE id = ?').bind(id).run();
+  
+  if (result.meta.changes === 0) {
+    return c.json({ success: false, error: 'Question set not found' }, 404);
+  }
+  
+  return c.json({ success: true });
+});
+
+// ==================== Questions API ====================
+
 // Get all questions with optional filters
 app.get('/api/questions', async (c) => {
   const { env } = c;
   const difficulty = c.req.query('difficulty');
+  const setId = c.req.query('set_id');
   const limit = c.req.query('limit') || '100';
   
   let query = 'SELECT * FROM questions';
   const params: string[] = [];
+  const conditions: string[] = [];
   
   if (difficulty && ['A', 'B', 'C'].includes(difficulty)) {
-    query += ' WHERE difficulty = ?';
+    conditions.push('difficulty = ?');
     params.push(difficulty);
+  }
+  
+  if (setId) {
+    conditions.push('set_id = ?');
+    params.push(setId);
+  }
+  
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
   
   query += ' ORDER BY no ASC LIMIT ?';
@@ -56,13 +164,24 @@ app.get('/api/questions/random/:count', async (c) => {
   const { env } = c;
   const count = parseInt(c.req.param('count')) || 10;
   const difficulty = c.req.query('difficulty');
+  const setId = c.req.query('set_id');
   
   let query = 'SELECT * FROM questions';
   const params: string[] = [];
+  const conditions: string[] = [];
   
   if (difficulty && ['A', 'B', 'C'].includes(difficulty)) {
-    query += ' WHERE difficulty = ?';
+    conditions.push('difficulty = ?');
     params.push(difficulty);
+  }
+  
+  if (setId) {
+    conditions.push('set_id = ?');
+    params.push(setId);
+  }
+  
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
   
   query += ' ORDER BY RANDOM() LIMIT ?';
@@ -76,8 +195,9 @@ app.get('/api/questions/random/:count', async (c) => {
 app.get('/api/questions/review', async (c) => {
   const { env } = c;
   const limit = c.req.query('limit') || '20';
+  const setId = c.req.query('set_id');
   
-  const query = `
+  let query = `
     SELECT DISTINCT q.*, 
            COUNT(lh.id) as attempt_count,
            SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END) as correct_count,
@@ -85,13 +205,25 @@ app.get('/api/questions/review', async (c) => {
     FROM questions q
     LEFT JOIN learning_history lh ON q.id = lh.question_id
     WHERE lh.id IS NOT NULL
+  `;
+  
+  const params: string[] = [];
+  
+  if (setId) {
+    query += ' AND q.set_id = ?';
+    params.push(setId);
+  }
+  
+  query += `
     GROUP BY q.id
     HAVING correct_count < attempt_count
     ORDER BY last_attempted DESC, attempt_count DESC
     LIMIT ?
   `;
   
-  const result = await env.DB.prepare(query).bind(limit).all();
+  params.push(limit);
+  
+  const result = await env.DB.prepare(query).bind(...params).all();
   return c.json({ success: true, data: result.results });
 });
 
@@ -156,47 +288,78 @@ app.delete('/api/questions/:id', async (c) => {
   return c.json({ success: true });
 });
 
-// Import questions from JSON (bulk insert)
+// Import questions from JSON (bulk insert) with question set support
 app.post('/api/questions/import', async (c) => {
   const { env } = c;
   const body = await c.req.json();
-  const { questions, replace } = body;
+  const { questions, set_name, set_description, replace_set } = body;
   
   if (!Array.isArray(questions) || questions.length === 0) {
     return c.json({ success: false, error: 'Invalid questions data' }, 400);
   }
   
+  if (!set_name) {
+    return c.json({ success: false, error: 'Question set name is required' }, 400);
+  }
+  
   try {
-    // If replace is true, delete all existing questions
-    if (replace) {
-      await env.DB.prepare('DELETE FROM questions').run();
+    // Create new question set
+    const setResult = await env.DB.prepare(
+      'INSERT INTO question_sets (name, description) VALUES (?, ?)'
+    ).bind(set_name, set_description || '').run();
+    
+    const setId = setResult.meta.last_row_id;
+    
+    // If replace_set is true, delete existing questions in this set
+    if (replace_set && setId) {
+      await env.DB.prepare('DELETE FROM questions WHERE set_id = ?').bind(setId).run();
     }
     
-    // Insert all questions
+    // Insert all questions with set_id
     let successCount = 0;
     for (const q of questions) {
       if (!q.no || !q.question_text || !q.difficulty || !q.answer) {
         continue; // Skip invalid questions
       }
       
+      // Normalize answer (convert 〇 to ○)
+      const normalizedAnswer = q.answer.replace(/[〇]/g, '○');
+      
       await env.DB.prepare(
-        'INSERT INTO questions (no, question_text, difficulty, answer, explanation) VALUES (?, ?, ?, ?, ?)'
-      ).bind(q.no, q.question_text, q.difficulty, q.answer, q.explanation || '').run();
+        'INSERT INTO questions (no, question_text, difficulty, answer, explanation, set_id) VALUES (?, ?, ?, ?, ?, ?)'
+      ).bind(q.no, q.question_text, q.difficulty, normalizedAnswer, q.explanation || '', setId).run();
       
       successCount++;
     }
     
-    return c.json({ success: true, imported: successCount, total: questions.length });
+    return c.json({ 
+      success: true, 
+      imported: successCount, 
+      total: questions.length,
+      set_id: setId,
+      set_name: set_name
+    });
   } catch (error) {
     return c.json({ success: false, error: 'Import failed: ' + String(error) }, 500);
   }
 });
 
-// Export all questions to JSON
+// Export questions to JSON (with optional set filter)
 app.get('/api/questions/export', async (c) => {
   const { env } = c;
+  const setId = c.req.query('set_id');
   
-  const result = await env.DB.prepare('SELECT * FROM questions ORDER BY no ASC').all();
+  let query = 'SELECT * FROM questions';
+  const params: string[] = [];
+  
+  if (setId) {
+    query += ' WHERE set_id = ?';
+    params.push(setId);
+  }
+  
+  query += ' ORDER BY no ASC';
+  
+  const result = await env.DB.prepare(query).bind(...params).all();
   
   return c.json({ success: true, data: result.results });
 });
