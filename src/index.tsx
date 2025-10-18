@@ -16,19 +16,108 @@ app.use('/static/*', serveStatic({ root: './public' }))
 
 // ==================== API Routes ====================
 
+// ==================== Categories API ====================
+
+// Get all categories
+app.get('/api/categories', async (c) => {
+  const { env } = c;
+  
+  const result = await env.DB.prepare(`
+    SELECT c.*, COUNT(qs.id) as set_count
+    FROM categories c
+    LEFT JOIN question_sets qs ON c.id = qs.category_id
+    GROUP BY c.id
+    ORDER BY c.created_at ASC
+  `).all();
+  
+  return c.json({ success: true, data: result.results });
+});
+
+// Create category
+app.post('/api/categories', async (c) => {
+  const { env } = c;
+  const body = await c.req.json();
+  const { name, description, color } = body;
+  
+  if (!name) {
+    return c.json({ success: false, error: 'Name is required' }, 400);
+  }
+  
+  const result = await env.DB.prepare(
+    'INSERT INTO categories (name, description, color) VALUES (?, ?, ?)'
+  ).bind(name, description || '', color || '#3B82F6').run();
+  
+  return c.json({ success: true, data: { id: result.meta.last_row_id } });
+});
+
+// Update category
+app.put('/api/categories/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { name, description, color } = body;
+  
+  if (!name) {
+    return c.json({ success: false, error: 'Name is required' }, 400);
+  }
+  
+  const result = await env.DB.prepare(
+    'UPDATE categories SET name = ?, description = ?, color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(name, description || '', color || '#3B82F6', id).run();
+  
+  if (result.meta.changes === 0) {
+    return c.json({ success: false, error: 'Category not found' }, 404);
+  }
+  
+  return c.json({ success: true });
+});
+
+// Delete category
+app.delete('/api/categories/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  
+  // Cannot delete default category (id=1)
+  if (id === '1') {
+    return c.json({ success: false, error: 'Cannot delete default category' }, 400);
+  }
+  
+  const result = await env.DB.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+  
+  if (result.meta.changes === 0) {
+    return c.json({ success: false, error: 'Category not found' }, 404);
+  }
+  
+  return c.json({ success: true });
+});
+
 // ==================== Question Sets API ====================
 
 // Get all question sets
 app.get('/api/question-sets', async (c) => {
   const { env } = c;
+  const categoryId = c.req.query('category_id');
   
-  const result = await env.DB.prepare(`
-    SELECT qs.*, COUNT(q.id) as question_count
+  let query = `
+    SELECT qs.*, 
+           c.name as category_name, 
+           c.color as category_color,
+           COUNT(q.id) as question_count
     FROM question_sets qs
+    LEFT JOIN categories c ON qs.category_id = c.id
     LEFT JOIN questions q ON qs.id = q.set_id
-    GROUP BY qs.id
-    ORDER BY qs.created_at DESC
-  `).all();
+  `;
+  
+  const params: string[] = [];
+  
+  if (categoryId) {
+    query += ' WHERE qs.category_id = ?';
+    params.push(categoryId);
+  }
+  
+  query += ' GROUP BY qs.id ORDER BY qs.created_at DESC';
+  
+  const result = await env.DB.prepare(query).bind(...params).all();
   
   return c.json({ success: true, data: result.results });
 });
@@ -57,15 +146,15 @@ app.get('/api/question-sets/:id', async (c) => {
 app.post('/api/question-sets', async (c) => {
   const { env } = c;
   const body = await c.req.json();
-  const { name, description } = body;
+  const { name, description, category_id } = body;
   
   if (!name) {
     return c.json({ success: false, error: 'Name is required' }, 400);
   }
   
   const result = await env.DB.prepare(
-    'INSERT INTO question_sets (name, description) VALUES (?, ?)'
-  ).bind(name, description || '').run();
+    'INSERT INTO question_sets (name, description, category_id) VALUES (?, ?, ?)'
+  ).bind(name, description || '', category_id || null).run();
   
   return c.json({ success: true, data: { id: result.meta.last_row_id } });
 });
@@ -75,15 +164,15 @@ app.put('/api/question-sets/:id', async (c) => {
   const { env } = c;
   const id = c.req.param('id');
   const body = await c.req.json();
-  const { name, description } = body;
+  const { name, description, category_id } = body;
   
   if (!name) {
     return c.json({ success: false, error: 'Name is required' }, 400);
   }
   
   const result = await env.DB.prepare(
-    'UPDATE question_sets SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).bind(name, description || '', id).run();
+    'UPDATE question_sets SET name = ?, description = ?, category_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).bind(name, description || '', category_id || null, id).run();
   
   if (result.meta.changes === 0) {
     return c.json({ success: false, error: 'Question set not found' }, 404);

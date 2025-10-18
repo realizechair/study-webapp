@@ -2,7 +2,9 @@
 let currentView = 'home';
 let questions = [];
 let questionSets = [];
+let categories = [];
 let selectedSetId = null;
+let selectedCategoryId = null;
 let currentQuestionIndex = 0;
 let quizQuestions = [];
 let quizAnswers = [];
@@ -13,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadView('home');
     loadStats();
     loadQuestionSets();
+    loadCategories();
 });
 
 // Load view
@@ -129,70 +132,116 @@ function renderManage() {
                         </button>
                     </div>
 
-                    <!-- Import/Export Section -->
-                    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-file-excel text-green-600 mr-2"></i>
-                            Excel インポート/エクスポート
-                        </h2>
-                        
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Excelファイルをインポート</label>
-                                <input type="file" id="excel-file" accept=".xlsx,.xls" class="block w-full text-sm text-gray-500
-                                    file:mr-4 file:py-2 file:px-4
-                                    file:rounded-lg file:border-0
-                                    file:text-sm file:font-semibold
-                                    file:bg-indigo-50 file:text-indigo-700
-                                    hover:file:bg-indigo-100 cursor-pointer">
-                                <p class="text-xs text-gray-500 mt-1">形式: A列=No, B列=問題文, C列=難易度(A/B/C), D列=回答, E列=解説</p>
-                            </div>
-                            <div class="flex flex-col justify-end">
-                                <label class="flex items-center mb-2">
-                                    <input type="checkbox" id="replace-data" class="mr-2">
-                                    <span class="text-sm text-gray-700">既存データを削除してインポート</span>
-                                </label>
-                                <button onclick="importExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg transition">
-                                    <i class="fas fa-upload mr-2"></i>インポート
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="border-t pt-4">
-                            <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition">
-                                <i class="fas fa-download mr-2"></i>Excel形式でエクスポート
+                    <!-- Tabs -->
+                    <div class="bg-white rounded-t-xl shadow-lg mb-0">
+                        <div class="flex border-b">
+                            <button onclick="switchManageTab('import')" id="tab-import" class="flex-1 px-6 py-4 text-center font-medium text-gray-700 border-b-2 border-indigo-600 bg-indigo-50">
+                                <i class="fas fa-file-excel mr-2"></i>インポート/エクスポート
+                            </button>
+                            <button onclick="switchManageTab('categories')" id="tab-categories" class="flex-1 px-6 py-4 text-center font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300">
+                                <i class="fas fa-tags mr-2"></i>カテゴリー管理
+                            </button>
+                            <button onclick="switchManageTab('sets')" id="tab-sets" class="flex-1 px-6 py-4 text-center font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300">
+                                <i class="fas fa-folder mr-2"></i>問題セット管理
+                            </button>
+                            <button onclick="switchManageTab('questions')" id="tab-questions" class="flex-1 px-6 py-4 text-center font-medium text-gray-500 hover:text-gray-700 border-b-2 border-transparent hover:border-gray-300">
+                                <i class="fas fa-list mr-2"></i>問題一覧
                             </button>
                         </div>
                     </div>
 
-                    <!-- Question Sets -->
-                    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-folder text-purple-600 mr-2"></i>
-                            問題セット一覧
-                        </h2>
-                        <div id="question-sets-list" class="space-y-2">
-                            <div class="text-center py-4">
-                                <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+                    <!-- Tab Content -->
+                    <div class="bg-white rounded-b-xl shadow-lg p-6">
+                        <!-- Import/Export Tab -->
+                        <div id="content-import" class="tab-content">
+                            <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                                <i class="fas fa-file-excel text-green-600 mr-2"></i>
+                                Excel インポート/エクスポート
+                            </h2>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Excelファイルをインポート</label>
+                                    <input type="file" id="excel-file" accept=".xlsx,.xls" class="block w-full text-sm text-gray-500
+                                        file:mr-4 file:py-2 file:px-4
+                                        file:rounded-lg file:border-0
+                                        file:text-sm file:font-semibold
+                                        file:bg-indigo-50 file:text-indigo-700
+                                        hover:file:bg-indigo-100 cursor-pointer">
+                                    <p class="text-xs text-gray-500 mt-1">形式: A列=No, B列=問題文, C列=難易度(A/B/C), D列=回答, E列=解説</p>
+                                </div>
+                                <div class="flex flex-col justify-end">
+                                    <label class="flex items-center mb-2">
+                                        <input type="checkbox" id="replace-data" class="mr-2">
+                                        <span class="text-sm text-gray-700">既存データを削除してインポート</span>
+                                    </label>
+                                    <button onclick="importExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg transition">
+                                        <i class="fas fa-upload mr-2"></i>インポート
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="border-t pt-4">
+                                <button onclick="exportExcel()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg transition">
+                                    <i class="fas fa-download mr-2"></i>Excel形式でエクスポート
+                                </button>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Questions List -->
-                    <div class="bg-white rounded-xl shadow-lg p-6">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-2xl font-bold text-gray-800">
-                                <i class="fas fa-list text-blue-600 mr-2"></i>
-                                登録済み問題
-                            </h2>
-                            <select id="set-filter" onchange="filterQuestionsBySet(this.value)" class="px-4 py-2 border border-gray-300 rounded-lg">
-                                <option value="">すべての問題セット</option>
-                            </select>
+                        <!-- Categories Tab -->
+                        <div id="content-categories" class="tab-content hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">
+                                    <i class="fas fa-tags text-purple-600 mr-2"></i>
+                                    カテゴリー一覧
+                                </h2>
+                                <button onclick="showCreateCategoryModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg transition">
+                                    <i class="fas fa-plus mr-2"></i>新規カテゴリー
+                                </button>
+                            </div>
+                            <div id="categories-list" class="space-y-2">
+                                <div class="text-center py-4">
+                                    <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+                                </div>
+                            </div>
                         </div>
-                        <div id="questions-list" class="space-y-2">
-                            <div class="text-center py-8">
-                                <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
-                                <p class="text-gray-600 mt-2">読み込み中...</p>
+
+                        <!-- Question Sets Tab -->
+                        <div id="content-sets" class="tab-content hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">
+                                    <i class="fas fa-folder text-blue-600 mr-2"></i>
+                                    問題セット一覧
+                                </h2>
+                                <div class="flex gap-2">
+                                    <select id="category-filter" onchange="filterSetsByCategory(this.value)" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                        <option value="">すべてのカテゴリー</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div id="question-sets-list" class="space-y-2">
+                                <div class="text-center py-4">
+                                    <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Questions Tab -->
+                        <div id="content-questions" class="tab-content hidden">
+                            <div class="flex justify-between items-center mb-4">
+                                <h2 class="text-2xl font-bold text-gray-800">
+                                    <i class="fas fa-list text-blue-600 mr-2"></i>
+                                    登録済み問題
+                                </h2>
+                                <select id="set-filter" onchange="filterQuestionsBySet(this.value)" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">すべての問題セット</option>
+                                </select>
+                            </div>
+                            <div id="questions-list" class="space-y-2">
+                                <div class="text-center py-8">
+                                    <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+                                    <p class="text-gray-600 mt-2">読み込み中...</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1030,26 +1079,42 @@ function renderQuestionSetsList() {
     const listEl = document.getElementById('question-sets-list');
     if (!listEl) return;
     
-    if (questionSets.length === 0) {
+    // Filter by category if selected
+    let filteredSets = questionSets;
+    if (selectedCategoryId) {
+        filteredSets = questionSets.filter(set => set.category_id == selectedCategoryId);
+    }
+    
+    if (filteredSets.length === 0) {
         listEl.innerHTML = '<p class="text-gray-500 text-center py-4">問題セットがありません</p>';
         return;
     }
     
-    listEl.innerHTML = questionSets.map(set => `
-        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition flex justify-between items-center">
-            <div class="flex-1">
-                <h4 class="font-semibold text-gray-800">${escapeHtml(set.name)}</h4>
-                <p class="text-sm text-gray-600">${set.question_count || 0}問</p>
-            </div>
-            <div class="flex gap-2">
-                <button onclick="editQuestionSetName(${set.id}, '${escapeHtml(set.name).replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800 px-3 py-1">
-                    <i class="fas fa-edit"></i>
-                </button>
-                ${set.id !== 1 ? `
-                    <button onclick="deleteQuestionSet(${set.id})" class="text-red-600 hover:text-red-800 px-3 py-1">
-                        <i class="fas fa-trash"></i>
+    listEl.innerHTML = filteredSets.map(set => `
+        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition">
+            <div class="flex justify-between items-start mb-2">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-1">
+                        ${set.category_color ? `<div class="w-3 h-3 rounded-full" style="background-color: ${set.category_color}"></div>` : ''}
+                        <span class="text-xs text-gray-500">${escapeHtml(set.category_name || '未分類')}</span>
+                    </div>
+                    <h4 class="font-semibold text-gray-800 text-lg">${escapeHtml(set.name)}</h4>
+                    ${set.description ? `<p class="text-sm text-gray-500 mt-1">${escapeHtml(set.description)}</p>` : ''}
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="editQuestionSet(${set.id})" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-edit"></i>
                     </button>
-                ` : ''}
+                    ${set.id !== 1 ? `
+                        <button onclick="deleteQuestionSet(${set.id})" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg transition text-sm">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+            <div class="flex items-center gap-4 text-sm text-gray-600">
+                <span><i class="fas fa-question-circle mr-1"></i>${set.question_count || 0}問</span>
+                <span><i class="fas fa-clock mr-1"></i>${new Date(set.created_at).toLocaleDateString('ja-JP')}</span>
             </div>
         </div>
     `).join('');
@@ -1124,5 +1189,231 @@ async function unmarkForReview(questionId) {
         }
     } catch (error) {
         alert('削除に失敗しました: ' + error.message);
+    }
+}
+
+// ==================== Category Management ====================
+
+async function loadCategories() {
+    try {
+        const response = await axios.get('/api/categories');
+        if (response.data.success) {
+            categories = response.data.data;
+            renderCategoriesList();
+            populateCategoryFilter();
+        }
+    } catch (error) {
+        console.error('Failed to load categories:', error);
+    }
+}
+
+function renderCategoriesList() {
+    const container = document.getElementById('categories-list');
+    if (!container) return;
+    
+    if (categories.length === 0) {
+        container.innerHTML = '<p class="text-gray-500 text-center py-8">カテゴリーがありません</p>';
+        return;
+    }
+    
+    container.innerHTML = categories.map(cat => `
+        <div class="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div class="flex items-center gap-3 flex-1">
+                <div class="w-4 h-4 rounded-full" style="background-color: ${cat.color}"></div>
+                <div>
+                    <h3 class="font-semibold text-gray-800">${escapeHtml(cat.name)}</h3>
+                    <p class="text-sm text-gray-500">${escapeHtml(cat.description || '')}</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">${cat.set_count || 0}セット</span>
+                ${cat.id !== 1 ? `
+                    <button onclick="editCategory(${cat.id})" class="px-3 py-1 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button onclick="deleteCategory(${cat.id})" class="px-3 py-1 bg-red-500 hover:bg-red-600 text-white rounded-lg transition text-sm">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function populateCategoryFilter() {
+    const filter = document.getElementById('category-filter');
+    if (!filter) return;
+    
+    filter.innerHTML = '<option value="">すべてのカテゴリー</option>' +
+        categories.map(cat => `<option value="${cat.id}">${escapeHtml(cat.name)}</option>`).join('');
+}
+
+function showCreateCategoryModal() {
+    const name = prompt('カテゴリー名を入力してください:');
+    if (!name) return;
+    
+    const description = prompt('説明を入力してください（省略可）:');
+    const color = prompt('色を入力してください（例: #3B82F6）:', '#3B82F6');
+    
+    createCategory(name, description, color);
+}
+
+async function createCategory(name, description, color) {
+    try {
+        const response = await axios.post('/api/categories', {
+            name: name,
+            description: description || '',
+            color: color || '#3B82F6'
+        });
+        
+        if (response.data.success) {
+            alert('カテゴリーを作成しました');
+            loadCategories();
+        }
+    } catch (error) {
+        alert('作成に失敗しました: ' + error.message);
+    }
+}
+
+async function editCategory(categoryId) {
+    const category = categories.find(c => c.id === categoryId);
+    if (!category) return;
+    
+    const name = prompt('カテゴリー名を編集:', category.name);
+    if (!name) return;
+    
+    const description = prompt('説明を編集:', category.description || '');
+    const color = prompt('色を編集:', category.color || '#3B82F6');
+    
+    try {
+        const response = await axios.put(`/api/categories/${categoryId}`, {
+            name: name,
+            description: description || '',
+            color: color || '#3B82F6'
+        });
+        
+        if (response.data.success) {
+            alert('カテゴリーを更新しました');
+            loadCategories();
+        }
+    } catch (error) {
+        alert('更新に失敗しました: ' + error.message);
+    }
+}
+
+async function deleteCategory(categoryId) {
+    if (!confirm('このカテゴリーを削除しますか？\n関連する問題セットは「未分類」に移動されます。')) {
+        return;
+    }
+    
+    try {
+        const response = await axios.delete(`/api/categories/${categoryId}`);
+        
+        if (response.data.success) {
+            alert('カテゴリーを削除しました');
+            loadCategories();
+            loadQuestionSets();
+        }
+    } catch (error) {
+        alert('削除に失敗しました: ' + error.message);
+    }
+}
+
+// ==================== Question Set Management ====================
+
+async function deleteQuestionSet(setId) {
+    if (!confirm('この問題セットを削除しますか？\n含まれるすべての問題も削除されます。')) {
+        return;
+    }
+    
+    try {
+        const response = await axios.delete(`/api/question-sets/${setId}`);
+        
+        if (response.data.success) {
+            alert('問題セットを削除しました');
+            loadQuestionSets();
+            loadQuestions();
+        }
+    } catch (error) {
+        alert('削除に失敗しました: ' + error.message);
+    }
+}
+
+async function editQuestionSet(setId) {
+    const set = questionSets.find(s => s.id === setId);
+    if (!set) return;
+    
+    const name = prompt('問題セット名を編集:', set.name);
+    if (!name) return;
+    
+    const description = prompt('説明を編集:', set.description || '');
+    
+    // Category selection
+    const categoryOptions = categories.map(cat => 
+        `${cat.id}. ${cat.name}${cat.id === set.category_id ? ' (現在)' : ''}`
+    ).join('\n');
+    const categoryInput = prompt(`カテゴリーを選択してください（番号で入力）:\n${categoryOptions}`, set.category_id || '1');
+    const categoryId = categoryInput ? parseInt(categoryInput) : set.category_id;
+    
+    try {
+        const response = await axios.put(`/api/question-sets/${setId}`, {
+            name: name,
+            description: description || '',
+            category_id: categoryId
+        });
+        
+        if (response.data.success) {
+            alert('問題セットを更新しました');
+            loadQuestionSets();
+        }
+    } catch (error) {
+        alert('更新に失敗しました: ' + error.message);
+    }
+}
+
+async function filterSetsByCategory(categoryId) {
+    selectedCategoryId = categoryId || null;
+    renderQuestionSetsList();
+}
+
+// ==================== Tab Management ====================
+
+function switchManageTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('[id^="tab-"]').forEach(tab => {
+        tab.classList.remove('border-indigo-600', 'bg-indigo-50', 'text-gray-700');
+        tab.classList.add('border-transparent', 'text-gray-500');
+    });
+    
+    const activeTab = document.getElementById(`tab-${tabName}`);
+    if (activeTab) {
+        activeTab.classList.remove('border-transparent', 'text-gray-500');
+        activeTab.classList.add('border-indigo-600', 'bg-indigo-50', 'text-gray-700');
+    }
+    
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
+    });
+    
+    const activeContent = document.getElementById(`content-${tabName}`);
+    if (activeContent) {
+        activeContent.classList.remove('hidden');
+    }
+    
+    // Load data if needed
+    if (tabName === 'categories') {
+        loadCategories();
+    } else if (tabName === 'sets') {
+        loadQuestionSets().then(() => {
+            renderQuestionSetsList();
+            populateCategoryFilter();
+        });
+        loadCategories();
+    } else if (tabName === 'questions') {
+        loadQuestions();
+        loadQuestionSets().then(() => {
+            populateSetFilter();
+        });
     }
 }
