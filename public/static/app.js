@@ -1,6 +1,8 @@
 // Global state
 let currentView = 'home';
 let questions = [];
+let questionSets = [];
+let selectedSetId = null;
 let currentQuestionIndex = 0;
 let quizQuestions = [];
 let quizAnswers = [];
@@ -10,6 +12,7 @@ let stats = null;
 document.addEventListener('DOMContentLoaded', () => {
     loadView('home');
     loadStats();
+    loadQuestionSets();
 });
 
 // Load view
@@ -24,9 +27,16 @@ function loadView(view) {
         case 'manage':
             app.innerHTML = renderManage();
             loadQuestions();
+            loadQuestionSets().then(() => {
+                renderQuestionSetsList();
+                populateSetFilter();
+            });
             break;
         case 'study':
             app.innerHTML = renderStudyMenu();
+            loadQuestionSets().then(() => {
+                populateQuizSetOptions();
+            });
             break;
         case 'quiz':
             startQuiz();
@@ -155,12 +165,30 @@ function renderManage() {
                         </div>
                     </div>
 
+                    <!-- Question Sets -->
+                    <div class="bg-white rounded-xl shadow-lg p-6 mb-8">
+                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
+                            <i class="fas fa-folder text-purple-600 mr-2"></i>
+                            問題セット一覧
+                        </h2>
+                        <div id="question-sets-list" class="space-y-2">
+                            <div class="text-center py-4">
+                                <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Questions List -->
                     <div class="bg-white rounded-xl shadow-lg p-6">
-                        <h2 class="text-2xl font-bold text-gray-800 mb-4">
-                            <i class="fas fa-list text-blue-600 mr-2"></i>
-                            登録済み問題
-                        </h2>
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800">
+                                <i class="fas fa-list text-blue-600 mr-2"></i>
+                                登録済み問題
+                            </h2>
+                            <select id="set-filter" onchange="filterQuestionsBySet(this.value)" class="px-4 py-2 border border-gray-300 rounded-lg">
+                                <option value="">すべての問題セット</option>
+                            </select>
+                        </div>
                         <div id="questions-list" class="space-y-2">
                             <div class="text-center py-8">
                                 <i class="fas fa-spinner fa-spin text-3xl text-blue-500"></i>
@@ -198,6 +226,13 @@ function renderStudyMenu() {
                             <p class="text-gray-600 mb-4">問題をランダムに出題します</p>
                             
                             <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">問題セット</label>
+                                <select id="quiz-set" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">すべて</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">問題数</label>
                                 <input type="number" id="quiz-count" value="10" min="1" max="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                             </div>
@@ -224,11 +259,18 @@ function renderStudyMenu() {
                             <p class="text-gray-600 mb-4">間違えた問題を復習します</p>
                             
                             <div class="mb-4">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">問題セット</label>
+                                <select id="review-set" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                                    <option value="">すべて</option>
+                                </select>
+                            </div>
+                            
+                            <div class="mb-4">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">問題数</label>
                                 <input type="number" id="review-count" value="20" min="1" max="100" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
                             </div>
                             
-                            <div class="mb-12">
+                            <div class="mb-4">
                                 <p class="text-sm text-gray-500">※正答率の低い問題を優先的に出題</p>
                             </div>
                             
@@ -353,6 +395,7 @@ async function importExcel() {
     }
     
     const file = fileInput.files[0];
+    const fileName = file.name.replace(/\.(xlsx?|xls)$/i, ''); // Remove extension
     const reader = new FileReader();
     
     reader.onload = async (e) => {
@@ -384,15 +427,18 @@ async function importExcel() {
                 return;
             }
             
-            // Send to API
+            // Send to API with file name as question set name
             const response = await axios.post('/api/questions/import', {
                 questions: parsedQuestions,
-                replace: replaceData
+                set_name: fileName,
+                set_description: `${fileName}からインポート（${new Date().toLocaleString('ja-JP')}）`,
+                replace_set: replaceData
             });
             
             if (response.data.success) {
-                alert(`${response.data.imported}問を正常にインポートしました`);
+                alert(`問題セット「${response.data.set_name}」に${response.data.imported}問をインポートしました`);
                 loadQuestions();
+                loadQuestionSets();
                 fileInput.value = '';
             } else {
                 alert('インポートに失敗しました: ' + response.data.error);
@@ -472,11 +518,19 @@ async function deleteQuestion(id) {
 async function startQuiz() {
     const count = parseInt(document.getElementById('quiz-count')?.value || 10);
     const difficulty = document.getElementById('quiz-difficulty')?.value || '';
+    const setId = document.getElementById('quiz-set')?.value || '';
     
     try {
         let url = `/api/questions/random/${count}`;
+        const params = [];
         if (difficulty) {
-            url += `?difficulty=${difficulty}`;
+            params.push(`difficulty=${difficulty}`);
+        }
+        if (setId) {
+            params.push(`set_id=${setId}`);
+        }
+        if (params.length > 0) {
+            url += '?' + params.join('&');
         }
         
         const response = await axios.get(url);
@@ -498,9 +552,14 @@ async function startQuiz() {
 // Start review
 async function startReview() {
     const count = parseInt(document.getElementById('review-count')?.value || 20);
+    const setId = document.getElementById('review-set')?.value || '';
     
     try {
-        const response = await axios.get(`/api/questions/review?limit=${count}`);
+        let url = `/api/questions/review?limit=${count}`;
+        if (setId) {
+            url += `&set_id=${setId}`;
+        }
+        const response = await axios.get(url);
         if (response.data.success && response.data.data.length > 0) {
             quizQuestions = response.data.data;
             currentQuestionIndex = 0;
@@ -908,4 +967,116 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Question Sets functions
+async function loadQuestionSets() {
+    try {
+        const response = await axios.get('/api/question-sets');
+        if (response.data.success) {
+            questionSets = response.data.data;
+        }
+    } catch (error) {
+        console.error('Failed to load question sets:', error);
+    }
+}
+
+async function deleteQuestionSet(id) {
+    if (!confirm('この問題セットを削除しますか？（問題も全て削除されます）')) return;
+    
+    try {
+        const response = await axios.delete(`/api/question-sets/${id}`);
+        if (response.data.success) {
+            alert('問題セットを削除しました');
+            loadQuestionSets();
+            loadView('manage');
+        } else {
+            alert('削除に失敗しました: ' + response.data.error);
+        }
+    } catch (error) {
+        alert('削除に失敗しました: ' + error.message);
+    }
+}
+
+async function editQuestionSetName(id, currentName) {
+    const newName = prompt('新しい問題セット名を入力してください', currentName);
+    if (!newName || newName === currentName) return;
+    
+    try {
+        const response = await axios.put(`/api/question-sets/${id}`, {
+            name: newName,
+            description: ''
+        });
+        
+        if (response.data.success) {
+            alert('問題セット名を変更しました');
+            loadQuestionSets();
+            loadView('manage');
+        } else {
+            alert('変更に失敗しました: ' + response.data.error);
+        }
+    } catch (error) {
+        alert('変更に失敗しました: ' + error.message);
+    }
+}
+
+function renderQuestionSetsList() {
+    const listEl = document.getElementById('question-sets-list');
+    if (!listEl) return;
+    
+    if (questionSets.length === 0) {
+        listEl.innerHTML = '<p class="text-gray-500 text-center py-4">問題セットがありません</p>';
+        return;
+    }
+    
+    listEl.innerHTML = questionSets.map(set => `
+        <div class="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition flex justify-between items-center">
+            <div class="flex-1">
+                <h4 class="font-semibold text-gray-800">${escapeHtml(set.name)}</h4>
+                <p class="text-sm text-gray-600">${set.question_count || 0}問</p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="editQuestionSetName(${set.id}, '${escapeHtml(set.name).replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800 px-3 py-1">
+                    <i class="fas fa-edit"></i>
+                </button>
+                ${set.id !== 1 ? `
+                    <button onclick="deleteQuestionSet(${set.id})" class="text-red-600 hover:text-red-800 px-3 py-1">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                ` : ''}
+            </div>
+        </div>
+    `).join('');
+}
+
+function populateSetFilter() {
+    const filterEl = document.getElementById('set-filter');
+    if (!filterEl) return;
+    
+    filterEl.innerHTML = '<option value="">すべての問題セット</option>' +
+        questionSets.map(set => `<option value="${set.id}">${escapeHtml(set.name)}</option>`).join('');
+}
+
+function populateQuizSetOptions() {
+    const quizSetEl = document.getElementById('quiz-set');
+    const reviewSetEl = document.getElementById('review-set');
+    
+    const options = '<option value="">すべて</option>' +
+        questionSets.map(set => `<option value="${set.id}">${escapeHtml(set.name)}</option>`).join('');
+    
+    if (quizSetEl) quizSetEl.innerHTML = options;
+    if (reviewSetEl) reviewSetEl.innerHTML = options;
+}
+
+async function filterQuestionsBySet(setId) {
+    try {
+        const url = setId ? `/api/questions?set_id=${setId}` : '/api/questions';
+        const response = await axios.get(url);
+        if (response.data.success) {
+            questions = response.data.data;
+            renderQuestionsList();
+        }
+    } catch (error) {
+        alert('問題の読み込みに失敗しました: ' + error.message);
+    }
 }
