@@ -550,23 +550,29 @@ function renderQuizQuestion() {
                         </div>
 
                         <!-- Answer Buttons -->
-                        <div class="mb-6">
-                            <label class="block text-lg font-medium text-gray-700 mb-4 text-center">あなたの回答を選択してください</label>
-                            <div class="grid grid-cols-2 gap-6">
-                                <button onclick="submitAnswer('○')" class="group bg-gradient-to-br from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white p-8 rounded-2xl shadow-lg transition-all transform hover:scale-105 active:scale-95">
-                                    <div class="text-7xl font-bold mb-2">○</div>
-                                    <div class="text-xl font-semibold">正しい</div>
-                                </button>
-                                <button onclick="submitAnswer('×')" class="group bg-gradient-to-br from-red-400 to-red-600 hover:from-red-500 hover:to-red-700 text-white p-8 rounded-2xl shadow-lg transition-all transform hover:scale-105 active:scale-95">
-                                    <div class="text-7xl font-bold mb-2">×</div>
-                                    <div class="text-xl font-semibold">誤り</div>
-                                </button>
-                            </div>
+                        <div class="space-y-4 mb-6">
+                            <button onclick="submitAnswer('○')" class="w-full flex items-center gap-3 p-5 bg-white border-2 border-green-500 rounded-xl hover:bg-green-50 transition-all">
+                                <div class="w-8 h-8 rounded-full border-2 border-green-500 flex items-center justify-center">
+                                    <i class="fas fa-circle text-green-500 text-sm"></i>
+                                </div>
+                                <span class="text-lg font-medium text-gray-800">○ (はい・正しい)</span>
+                            </button>
+                            
+                            <button onclick="submitAnswer('×')" class="w-full flex items-center gap-3 p-5 bg-white border-2 border-red-500 rounded-xl hover:bg-red-50 transition-all">
+                                <div class="w-8 h-8 rounded-full border-2 border-red-500 flex items-center justify-center">
+                                    <i class="fas fa-times text-red-500 text-lg"></i>
+                                </div>
+                                <span class="text-lg font-medium text-gray-800">× (いいえ・間違い)</span>
+                            </button>
                         </div>
 
-                        <!-- Cancel Button -->
-                        <div class="text-center">
-                            <button onclick="if(confirm('学習を中止しますか?')) loadView('study')" class="bg-gray-500 hover:bg-gray-600 text-white px-8 py-2 rounded-lg transition">
+                        <!-- Action Buttons -->
+                        <div class="flex gap-3">
+                            <button onclick="loadView('home')" class="flex-1 bg-gray-600 hover:bg-gray-700 text-white px-4 py-3 rounded-lg transition flex items-center justify-center gap-2">
+                                <i class="fas fa-home"></i>
+                                <span>ホームに戻る</span>
+                            </button>
+                            <button onclick="if(confirm('学習を中止しますか?')) loadView('study')" class="flex-1 bg-gray-500 hover:bg-gray-600 text-white px-4 py-3 rounded-lg transition">
                                 <i class="fas fa-times mr-2"></i>中止
                             </button>
                         </div>
