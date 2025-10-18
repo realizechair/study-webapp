@@ -245,20 +245,6 @@ app.get('/api/questions', async (c) => {
   return c.json({ success: true, data: result.results });
 });
 
-// Get single question by ID
-app.get('/api/questions/:id', async (c) => {
-  const { env } = c;
-  const id = c.req.param('id');
-  
-  const result = await env.DB.prepare('SELECT * FROM questions WHERE id = ?').bind(id).first();
-  
-  if (!result) {
-    return c.json({ success: false, error: 'Question not found' }, 404);
-  }
-  
-  return c.json({ success: true, data: result });
-});
-
 // Get random questions with priority (less attempted, less correct)
 app.get('/api/questions/random/:count', async (c) => {
   const { env } = c;
@@ -511,6 +497,20 @@ app.get('/api/questions/export', async (c) => {
   const result = await env.DB.prepare(query).bind(...params).all();
   
   return c.json({ success: true, data: result.results });
+});
+
+// Get single question by ID (must be after specific routes like /review, /random, /export)
+app.get('/api/questions/:id', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  
+  const result = await env.DB.prepare('SELECT * FROM questions WHERE id = ?').bind(id).first();
+  
+  if (!result) {
+    return c.json({ success: false, error: 'Question not found' }, 404);
+  }
+  
+  return c.json({ success: true, data: result });
 });
 
 // ==================== Review Marks API ====================
