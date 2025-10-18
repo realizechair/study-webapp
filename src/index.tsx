@@ -202,24 +202,35 @@ app.delete('/api/question-sets/:id', async (c) => {
 
 // ==================== Questions API ====================
 
-// Get all questions with optional filters
+// Get all questions with optional filters and statistics
 app.get('/api/questions', async (c) => {
   const { env } = c;
   const difficulty = c.req.query('difficulty');
   const setId = c.req.query('set_id');
-  const limit = c.req.query('limit') || '100';
+  const limit = c.req.query('limit') || '1000';
   
-  let query = 'SELECT * FROM questions';
+  let query = `
+    SELECT q.*,
+           COALESCE(COUNT(lh.id), 0) as attempt_count,
+           COALESCE(SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count,
+           CASE 
+             WHEN COUNT(lh.id) = 0 THEN 0
+             ELSE ROUND(CAST(SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(lh.id) * 100, 1)
+           END as accuracy_rate
+    FROM questions q
+    LEFT JOIN learning_history lh ON q.id = lh.question_id
+  `;
+  
   const params: string[] = [];
   const conditions: string[] = [];
   
   if (difficulty && ['A', 'B', 'C'].includes(difficulty)) {
-    conditions.push('difficulty = ?');
+    conditions.push('q.difficulty = ?');
     params.push(difficulty);
   }
   
   if (setId) {
-    conditions.push('set_id = ?');
+    conditions.push('q.set_id = ?');
     params.push(setId);
   }
   
@@ -227,7 +238,7 @@ app.get('/api/questions', async (c) => {
     query += ' WHERE ' + conditions.join(' AND ');
   }
   
-  query += ' ORDER BY no ASC LIMIT ?';
+  query += ' GROUP BY q.id ORDER BY q.no ASC LIMIT ?';
   params.push(limit);
   
   const result = await env.DB.prepare(query).bind(...params).all();
@@ -248,24 +259,39 @@ app.get('/api/questions/:id', async (c) => {
   return c.json({ success: true, data: result });
 });
 
-// Get random questions
+// Get random questions with priority (less attempted, less correct)
 app.get('/api/questions/random/:count', async (c) => {
   const { env } = c;
   const count = parseInt(c.req.param('count')) || 10;
   const difficulty = c.req.query('difficulty');
   const setId = c.req.query('set_id');
   
-  let query = 'SELECT * FROM questions';
+  // Query with priority: prioritize questions with fewer attempts and fewer correct answers
+  let query = `
+    SELECT q.*,
+           COALESCE(COUNT(lh.id), 0) as attempt_count,
+           COALESCE(SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END), 0) as correct_count,
+           -- Priority score: lower is better
+           -- Never attempted = 0, attempted but wrong = 1-10, correct = 10+
+           CASE 
+             WHEN COUNT(lh.id) = 0 THEN 0
+             WHEN COUNT(lh.id) > 0 AND SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END) = 0 THEN 5
+             ELSE (CAST(SUM(CASE WHEN lh.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(lh.id)) * 100 + COUNT(lh.id)
+           END as priority_score
+    FROM questions q
+    LEFT JOIN learning_history lh ON q.id = lh.question_id
+  `;
+  
   const params: string[] = [];
   const conditions: string[] = [];
   
   if (difficulty && ['A', 'B', 'C'].includes(difficulty)) {
-    conditions.push('difficulty = ?');
+    conditions.push('q.difficulty = ?');
     params.push(difficulty);
   }
   
   if (setId) {
-    conditions.push('set_id = ?');
+    conditions.push('q.set_id = ?');
     params.push(setId);
   }
   
@@ -273,7 +299,11 @@ app.get('/api/questions/random/:count', async (c) => {
     query += ' WHERE ' + conditions.join(' AND ');
   }
   
-  query += ' ORDER BY RANDOM() LIMIT ?';
+  query += `
+    GROUP BY q.id
+    ORDER BY priority_score ASC, RANDOM()
+    LIMIT ?
+  `;
   params.push(count.toString());
   
   const result = await env.DB.prepare(query).bind(...params).all();

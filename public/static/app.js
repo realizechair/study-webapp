@@ -463,6 +463,20 @@ function renderQuestionsList() {
                             <span class="bg-${getDifficultyColor(q.difficulty)}-100 text-${getDifficultyColor(q.difficulty)}-800 text-xs font-semibold px-2.5 py-0.5 rounded">
                                 難易度: ${q.difficulty}
                             </span>
+                            ${q.attempt_count > 0 ? `
+                                <span class="bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+                                    <i class="fas fa-chart-line mr-1"></i>
+                                    出題: ${q.attempt_count}回
+                                </span>
+                                <span class="bg-${q.accuracy_rate >= 80 ? 'green' : q.accuracy_rate >= 50 ? 'yellow' : 'red'}-100 text-${q.accuracy_rate >= 80 ? 'green' : q.accuracy_rate >= 50 ? 'yellow' : 'red'}-800 text-xs font-semibold px-2.5 py-0.5 rounded">
+                                    <i class="fas fa-check-circle mr-1"></i>
+                                    正解: ${q.correct_count}回 (${q.accuracy_rate}%)
+                                </span>
+                            ` : `
+                                <span class="bg-gray-100 text-gray-600 text-xs font-semibold px-2.5 py-0.5 rounded">
+                                    <i class="fas fa-info-circle mr-1"></i>未出題
+                                </span>
+                            `}
                         </div>
                         <p class="text-gray-800 font-medium mb-2">${escapeHtml(q.question_text)}</p>
                         <p class="text-sm text-gray-600">
