@@ -35,6 +35,13 @@ function loadView(view) {
                 renderQuestionSetsList();
                 populateSetFilter();
             });
+            // Add file input change listener
+            setTimeout(() => {
+                const fileInput = document.getElementById('excel-file');
+                if (fileInput) {
+                    fileInput.addEventListener('change', updateFileCount);
+                }
+            }, 100);
             break;
         case 'study':
             app.innerHTML = renderStudyMenu();
@@ -166,14 +173,15 @@ function renderManage() {
                             
                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-2">Excelファイルをインポート</label>
-                                    <input type="file" id="excel-file" accept=".xlsx,.xls" class="block w-full text-sm text-gray-500
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Excelファイルをインポート（複数選択可）</label>
+                                    <input type="file" id="excel-file" accept=".xlsx,.xls" multiple class="block w-full text-sm text-gray-500
                                         file:mr-4 file:py-2 file:px-4
                                         file:rounded-lg file:border-0
                                         file:text-sm file:font-semibold
                                         file:bg-indigo-50 file:text-indigo-700
                                         hover:file:bg-indigo-100 cursor-pointer">
                                     <p class="text-xs text-gray-500 mt-1">形式: A列=No, B列=問題文, C列=難易度(A/B/C), D列=回答, E列=解説</p>
+                                    <p class="text-xs text-blue-600 mt-1" id="file-count"></p>
                                 </div>
                                 <div class="flex flex-col justify-end">
                                     <label class="flex items-center mb-2">
@@ -181,7 +189,7 @@ function renderManage() {
                                         <span class="text-sm text-gray-700">既存データを削除してインポート</span>
                                     </label>
                                     <button onclick="importExcel()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg transition">
-                                        <i class="fas fa-upload mr-2"></i>インポート
+                                        <i class="fas fa-upload mr-2"></i>一括インポート
                                     </button>
                                 </div>
                             </div>
@@ -476,18 +484,51 @@ async function importExcel() {
     const fileInput = document.getElementById('excel-file');
     const replaceData = document.getElementById('replace-data').checked;
     
-    if (!fileInput.files || !fileInput.files[0]) {
+    if (!fileInput.files || fileInput.files.length === 0) {
         alert('ファイルを選択してください');
         return;
     }
     
-    const file = fileInput.files[0];
-    const fileName = file.name.replace(/\.(xlsx?|xls)$/i, ''); // Remove extension
-    const reader = new FileReader();
+    const files = Array.from(fileInput.files);
+    const totalFiles = files.length;
     
-    reader.onload = async (e) => {
+    // Confirmation for multiple files
+    if (totalFiles > 1) {
+        const confirm = window.confirm(`${totalFiles}個のファイルを一括インポートします。よろしいですか？`);
+        if (!confirm) return;
+    }
+    
+    let successCount = 0;
+    let failCount = 0;
+    const results = [];
+    
+    // Show progress
+    const progressDiv = document.createElement('div');
+    progressDiv.className = 'fixed top-4 right-4 bg-white border border-gray-300 rounded-lg shadow-lg p-4 z-50';
+    progressDiv.innerHTML = `
+        <div class="flex items-center gap-3">
+            <i class="fas fa-spinner fa-spin text-2xl text-blue-500"></i>
+            <div>
+                <p class="font-semibold">インポート中...</p>
+                <p class="text-sm text-gray-600" id="import-progress">0 / ${totalFiles}</p>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(progressDiv);
+    
+    // Process each file
+    for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+        const file = files[fileIndex];
+        const fileName = file.name.replace(/\.(xlsx?|xls)$/i, '');
+        
+        // Update progress
+        const progressText = document.getElementById('import-progress');
+        if (progressText) {
+            progressText.textContent = `${fileIndex + 1} / ${totalFiles} - ${fileName}`;
+        }
+        
         try {
-            const data = new Uint8Array(e.target.result);
+            const data = await readFileAsArrayBuffer(file);
             const workbook = XLSX.read(data, { type: 'array' });
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
@@ -510,8 +551,9 @@ async function importExcel() {
             }
             
             if (parsedQuestions.length === 0) {
-                alert('有効なデータが見つかりませんでした');
-                return;
+                failCount++;
+                results.push(`❌ ${fileName}: 有効なデータなし`);
+                continue;
             }
             
             // Send to API with file name as question set name
@@ -519,23 +561,68 @@ async function importExcel() {
                 questions: parsedQuestions,
                 set_name: fileName,
                 set_description: `${fileName}からインポート（${new Date().toLocaleString('ja-JP')}）`,
-                replace_set: replaceData
+                replace_set: replaceData && fileIndex === 0 // Only replace on first file
             });
             
             if (response.data.success) {
-                alert(`問題セット「${response.data.set_name}」に${response.data.imported}問をインポートしました`);
-                loadQuestions();
-                loadQuestionSets();
-                fileInput.value = '';
+                successCount++;
+                results.push(`✅ ${fileName}: ${response.data.imported}問`);
             } else {
-                alert('インポートに失敗しました: ' + response.data.error);
+                failCount++;
+                results.push(`❌ ${fileName}: ${response.data.error}`);
             }
         } catch (error) {
-            alert('ファイルの読み込みに失敗しました: ' + error.message);
+            failCount++;
+            results.push(`❌ ${fileName}: ${error.message}`);
         }
-    };
+    }
     
-    reader.readAsArrayBuffer(file);
+    // Remove progress indicator
+    progressDiv.remove();
+    
+    // Show results
+    const resultMessage = `
+インポート完了
+
+成功: ${successCount}ファイル
+失敗: ${failCount}ファイル
+
+詳細:
+${results.join('\n')}
+    `.trim();
+    
+    alert(resultMessage);
+    
+    // Reload data
+    loadQuestions();
+    loadQuestionSets();
+    fileInput.value = '';
+    updateFileCount();
+}
+
+// Helper function to read file as ArrayBuffer
+function readFileAsArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(new Uint8Array(e.target.result));
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
+
+// Update file count display
+function updateFileCount() {
+    const fileInput = document.getElementById('excel-file');
+    const fileCountEl = document.getElementById('file-count');
+    
+    if (!fileInput || !fileCountEl) return;
+    
+    const count = fileInput.files ? fileInput.files.length : 0;
+    if (count > 0) {
+        fileCountEl.textContent = `${count}個のファイルが選択されています`;
+    } else {
+        fileCountEl.textContent = '';
+    }
 }
 
 // Export Excel
