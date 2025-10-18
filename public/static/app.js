@@ -549,21 +549,25 @@ function renderQuizQuestion() {
                             <h2 class="text-2xl font-bold text-gray-800">${escapeHtml(question.question_text)}</h2>
                         </div>
 
-                        <!-- Answer Input -->
+                        <!-- Answer Buttons -->
                         <div class="mb-6">
-                            <label class="block text-lg font-medium text-gray-700 mb-3">あなたの回答</label>
-                            <input type="text" id="user-answer" placeholder="回答を入力してください" 
-                                class="w-full px-4 py-3 text-lg border-2 border-gray-300 rounded-lg focus:border-indigo-500 focus:outline-none"
-                                onkeypress="if(event.key === 'Enter') submitAnswer()">
+                            <label class="block text-lg font-medium text-gray-700 mb-4 text-center">あなたの回答を選択してください</label>
+                            <div class="grid grid-cols-2 gap-6">
+                                <button onclick="submitAnswer('○')" class="group bg-gradient-to-br from-green-400 to-green-600 hover:from-green-500 hover:to-green-700 text-white p-8 rounded-2xl shadow-lg transition-all transform hover:scale-105 active:scale-95">
+                                    <div class="text-7xl font-bold mb-2">○</div>
+                                    <div class="text-xl font-semibold">正しい</div>
+                                </button>
+                                <button onclick="submitAnswer('×')" class="group bg-gradient-to-br from-red-400 to-red-600 hover:from-red-500 hover:to-red-700 text-white p-8 rounded-2xl shadow-lg transition-all transform hover:scale-105 active:scale-95">
+                                    <div class="text-7xl font-bold mb-2">×</div>
+                                    <div class="text-xl font-semibold">誤り</div>
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Buttons -->
-                        <div class="flex gap-4">
-                            <button onclick="submitAnswer()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-lg text-lg font-semibold transition">
-                                <i class="fas fa-check mr-2"></i>回答する
-                            </button>
-                            <button onclick="if(confirm('学習を中止しますか?')) loadView('study')" class="bg-gray-500 hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition">
-                                <i class="fas fa-times"></i>
+                        <!-- Cancel Button -->
+                        <div class="text-center">
+                            <button onclick="if(confirm('学習を中止しますか?')) loadView('study')" class="bg-gray-500 hover:bg-gray-600 text-white px-8 py-2 rounded-lg transition">
+                                <i class="fas fa-times mr-2"></i>中止
                             </button>
                         </div>
                     </div>
@@ -571,17 +575,14 @@ function renderQuizQuestion() {
             </div>
         </div>
     `;
-    
-    document.getElementById('user-answer').focus();
 }
 
 // Submit answer
-async function submitAnswer() {
-    const userAnswer = document.getElementById('user-answer')?.value.trim();
+async function submitAnswer(userAnswer) {
     const question = quizQuestions[currentQuestionIndex];
     
     if (!userAnswer) {
-        alert('回答を入力してください');
+        alert('回答を選択してください');
         return;
     }
     
